@@ -1,0 +1,123 @@
+
+{
+  "name": "ordens_producao",
+  "options": {
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["numeroOrdem", "vendaId", "produtoId", "quantidade", "status", "dataInicio"],
+        "properties": {
+          "numeroOrdem": {
+            "bsonType": "string",
+            "description": "Número único da ordem de produção"
+          },
+          "vendaId": {
+            "bsonType": "string",
+            "description": "ID da venda que originou esta ordem"
+          },
+          "produtoId": {
+            "bsonType": "string",
+            "description": "ID do produto a ser produzido"
+          },
+          "quantidade": {
+            "bsonType": "int",
+            "minimum": 1,
+            "description": "Quantidade a ser produzida"
+          },
+          "status": {
+            "bsonType": "string",
+            "enum": ["planejada", "em_andamento", "pausada", "concluída", "cancelada"]
+          },
+          "prioridade": {
+            "bsonType": "string",
+            "enum": ["baixa", "normal", "alta", "urgente"]
+          },
+          "dataInicio": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de início planejada"
+          },
+          "dataFimPrevista": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de fim prevista"
+          },
+          "dataFimReal": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de fim real"
+          },
+          "etapas": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "nome": {"bsonType": "string"},
+                "descricao": {"bsonType": "string"},
+                "tempoEstimado": {"bsonType": "int"},
+                "tempoReal": {"bsonType": "int"},
+                "status": {"bsonType": "string", "enum": ["pendente", "em_andamento", "concluída"]},
+                "responsavel": {"bsonType": "string"},
+                "maquina": {"bsonType": "string"},
+                "dataInicio": {"bsonType": "string", "title": "datetime"},
+                "dataFim": {"bsonType": "string", "title": "datetime"}
+              }
+            }
+          },
+          "materiais": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "materialId": {"bsonType": "string"},
+                "quantidadeNecessaria": {"bsonType": "number"},
+                "quantidadeUtilizada": {"bsonType": "number"},
+                "custo": {"bsonType": "number"}
+              }
+            }
+          },
+          "qualidade": {
+            "bsonType": "object",
+            "properties": {
+              "inspecoes": {
+                "bsonType": "array",
+                "items": {
+                  "bsonType": "object",
+                  "properties": {
+                    "etapa": {"bsonType": "string"},
+                    "resultado": {"bsonType": "string", "enum": ["aprovado", "reprovado", "retrabalho"]},
+                    "observacoes": {"bsonType": "string"},
+                    "inspetor": {"bsonType": "string"},
+                    "dataInspecao": {"bsonType": "string", "title": "datetime"}
+                  }
+                }
+              }
+            }
+          },
+          "custoTotal": {
+            "bsonType": "number",
+            "minimum": 0,
+            "description": "Custo total da produção"
+          },
+          "observacoes": {
+            "bsonType": "string",
+            "description": "Observações gerais da ordem"
+          },
+          "createdAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de criação"
+          },
+          "updatedAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de atualização"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "validationLevel": "moderate",
+    "validationAction": "warn"
+  }
+}

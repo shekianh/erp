@@ -1,0 +1,125 @@
+
+{
+  "name": "funcionarios",
+  "options": {
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["matricula", "nome", "cpf", "cargo", "departamento", "status"],
+        "properties": {
+          "matricula": {
+            "bsonType": "string",
+            "description": "Matrícula única do funcionário"
+          },
+          "nome": {
+            "bsonType": "string",
+            "description": "Nome completo do funcionário"
+          },
+          "cpf": {
+            "bsonType": "string",
+            "description": "CPF do funcionário"
+          },
+          "rg": {
+            "bsonType": "string",
+            "description": "RG do funcionário"
+          },
+          "email": {
+            "bsonType": "string",
+            "description": "Email corporativo"
+          },
+          "telefone": {
+            "bsonType": "string",
+            "description": "Telefone de contato"
+          },
+          "endereco": {
+            "bsonType": "object",
+            "properties": {
+              "rua": {"bsonType": "string"},
+              "numero": {"bsonType": "string"},
+              "bairro": {"bsonType": "string"},
+              "cidade": {"bsonType": "string"},
+              "estado": {"bsonType": "string"},
+              "cep": {"bsonType": "string"}
+            }
+          },
+          "cargo": {
+            "bsonType": "string",
+            "description": "Cargo do funcionário"
+          },
+          "departamento": {
+            "bsonType": "string",
+            "enum": ["produção", "qualidade", "vendas", "rh", "financeiro", "ti", "logística"]
+          },
+          "salario": {
+            "bsonType": "number",
+            "minimum": 0,
+            "description": "Salário base"
+          },
+          "dataAdmissao": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de admissão"
+          },
+          "dataDemissao": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de demissão"
+          },
+          "status": {
+            "bsonType": "string",
+            "enum": ["ativo", "inativo", "férias", "licença"]
+          },
+          "supervisor": {
+            "bsonType": "string",
+            "description": "Matrícula do supervisor"
+          },
+          "competencias": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "string"
+            }
+          },
+          "avaliacoes": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "periodo": {"bsonType": "string"},
+                "nota": {"bsonType": "number", "minimum": 0, "maximum": 10},
+                "comentarios": {"bsonType": "string"},
+                "avaliador": {"bsonType": "string"},
+                "dataAvaliacao": {"bsonType": "string", "title": "datetime"}
+              }
+            }
+          },
+          "treinamentos": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "nome": {"bsonType": "string"},
+                "instituicao": {"bsonType": "string"},
+                "dataInicio": {"bsonType": "string", "title": "datetime"},
+                "dataFim": {"bsonType": "string", "title": "datetime"},
+                "status": {"bsonType": "string", "enum": ["planejado", "em_andamento", "concluído"]}
+              }
+            }
+          },
+          "createdAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de criação"
+          },
+          "updatedAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de atualização"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "validationLevel": "moderate",
+    "validationAction": "warn"
+  }
+}

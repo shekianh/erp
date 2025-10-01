@@ -1,0 +1,89 @@
+
+{
+  "name": "financeiro",
+  "options": {
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["numeroDocumento", "tipo", "categoria", "valor", "dataVencimento", "status"],
+        "properties": {
+          "numeroDocumento": {
+            "bsonType": "string",
+            "description": "Número único do documento financeiro"
+          },
+          "tipo": {
+            "bsonType": "string",
+            "enum": ["receita", "despesa"]
+          },
+          "categoria": {
+            "bsonType": "string",
+            "enum": ["venda", "compra_material", "salario", "aluguel", "energia", "telefone", "marketing", "impostos", "outros"]
+          },
+          "descricao": {
+            "bsonType": "string",
+            "description": "Descrição da movimentação"
+          },
+          "valor": {
+            "bsonType": "number",
+            "description": "Valor da movimentação"
+          },
+          "dataVencimento": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de vencimento"
+          },
+          "dataPagamento": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data do pagamento efetivo"
+          },
+          "status": {
+            "bsonType": "string",
+            "enum": ["pendente", "pago", "vencido", "cancelado"]
+          },
+          "formaPagamento": {
+            "bsonType": "string",
+            "enum": ["dinheiro", "cartão", "boleto", "pix", "transferência", "cheque"]
+          },
+          "fornecedor": {
+            "bsonType": "string",
+            "description": "Nome do fornecedor (para despesas)"
+          },
+          "cliente": {
+            "bsonType": "string",
+            "description": "Nome do cliente (para receitas)"
+          },
+          "vendaId": {
+            "bsonType": "string",
+            "description": "ID da venda relacionada"
+          },
+          "centroCusto": {
+            "bsonType": "string",
+            "description": "Centro de custo"
+          },
+          "observacoes": {
+            "bsonType": "string",
+            "description": "Observações adicionais"
+          },
+          "numeroNF": {
+            "bsonType": "string",
+            "description": "Número da nota fiscal"
+          },
+          "createdAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de criação"
+          },
+          "updatedAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de atualização"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "validationLevel": "moderate",
+    "validationAction": "warn"
+  }
+}

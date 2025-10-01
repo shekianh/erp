@@ -1,0 +1,92 @@
+
+{
+  "name": "vendas",
+  "options": {
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["numeroVenda", "marketplace", "cliente", "itens", "status", "dataVenda"],
+        "properties": {
+          "numeroVenda": {
+            "bsonType": "string",
+            "description": "Número único da venda"
+          },
+          "marketplace": {
+            "bsonType": "string",
+            "enum": ["Mercado Livre", "Amazon", "Americanas", "Shopee", "Loja Própria"]
+          },
+          "cliente": {
+            "bsonType": "object",
+            "properties": {
+              "nome": {"bsonType": "string"},
+              "email": {"bsonType": "string"},
+              "telefone": {"bsonType": "string"},
+              "endereco": {"bsonType": "string"}
+            }
+          },
+          "itens": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "produtoId": {"bsonType": "string"},
+                "quantidade": {"bsonType": "int", "minimum": 1},
+                "precoUnitario": {"bsonType": "number", "minimum": 0},
+                "subtotal": {"bsonType": "number", "minimum": 0}
+              }
+            }
+          },
+          "valorTotal": {
+            "bsonType": "number",
+            "minimum": 0,
+            "description": "Valor total da venda"
+          },
+          "frete": {
+            "bsonType": "number",
+            "minimum": 0,
+            "description": "Valor do frete"
+          },
+          "status": {
+            "bsonType": "string",
+            "enum": ["pendente", "confirmado", "produção", "enviado", "entregue", "cancelado"]
+          },
+          "formaPagamento": {
+            "bsonType": "string",
+            "enum": ["cartão", "boleto", "pix", "transferência"]
+          },
+          "dataVenda": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data da venda"
+          },
+          "dataEntregaPrevista": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data prevista para entrega"
+          },
+          "codigoRastreamento": {
+            "bsonType": "string",
+            "description": "Código de rastreamento dos correios"
+          },
+          "ordemProducaoId": {
+            "bsonType": "string",
+            "description": "ID da ordem de produção associada"
+          },
+          "createdAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de criação"
+          },
+          "updatedAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de atualização"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "validationLevel": "moderate",
+    "validationAction": "warn"
+  }
+}

@@ -1,0 +1,95 @@
+
+{
+  "name": "produtos",
+  "options": {
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": ["codigo", "nome", "categoria", "preco", "estoqueAtual", "estoqueMinimo", "status"],
+        "properties": {
+          "codigo": {
+            "bsonType": "string",
+            "description": "Código único do produto"
+          },
+          "nome": {
+            "bsonType": "string",
+            "description": "Nome do produto"
+          },
+          "descricao": {
+            "bsonType": "string",
+            "description": "Descrição detalhada do produto"
+          },
+          "categoria": {
+            "bsonType": "string",
+            "enum": ["eletrônicos", "roupas", "casa", "ferramentas", "alimentação", "outros"]
+          },
+          "preco": {
+            "bsonType": "number",
+            "minimum": 0,
+            "description": "Preço unitário do produto"
+          },
+          "custoProducao": {
+            "bsonType": "number",
+            "minimum": 0,
+            "description": "Custo de produção unitário"
+          },
+          "estoqueAtual": {
+            "bsonType": "int",
+            "minimum": 0,
+            "description": "Quantidade atual em estoque"
+          },
+          "estoqueMinimo": {
+            "bsonType": "int",
+            "minimum": 0,
+            "description": "Estoque mínimo para alerta"
+          },
+          "peso": {
+            "bsonType": "number",
+            "minimum": 0,
+            "description": "Peso em kg"
+          },
+          "dimensoes": {
+            "bsonType": "object",
+            "properties": {
+              "altura": {"bsonType": "number"},
+              "largura": {"bsonType": "number"},
+              "profundidade": {"bsonType": "number"}
+            }
+          },
+          "status": {
+            "bsonType": "string",
+            "enum": ["ativo", "inativo", "descontinuado"]
+          },
+          "marketplaces": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "object",
+              "properties": {
+                "nome": {"bsonType": "string"},
+                "ativo": {"bsonType": "bool"},
+                "precoMarketplace": {"bsonType": "number"}
+              }
+            }
+          },
+          "roteiroProdução": {
+            "bsonType": "string",
+            "description": "ID do roteiro de produção"
+          },
+          "createdAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de criação"
+          },
+          "updatedAt": {
+            "bsonType": "string",
+            "title": "datetime",
+            "description": "Data de atualização"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "validationLevel": "moderate",
+    "validationAction": "warn"
+  }
+}
