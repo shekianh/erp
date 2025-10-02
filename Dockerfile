@@ -1,80 +1,61 @@
-Ação
-Commit: Add files via upload 
-##########################################
-### Download Github Archive Started...
-### Thu, 02 Oct 2025 17:45:29 GMT
-##########################################
+# Multi-stage build for React + Vite application
 
-#0 building with "default" instance using docker driver
+# Stage 1: Build the application
+FROM node:20-alpine AS builder
 
-#1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 1.30kB done
-#1 DONE 0.0s
+# Install dependencies for native modules (canvas, sharp, etc.)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    giflib-dev \
+    pixman-dev
 
-#2 [internal] load metadata for docker.io/library/node:20-alpine
-#2 DONE 0.4s
+WORKDIR /app
 
-#3 [internal] load .dockerignore
-#3 transferring context: 2B done
-#3 DONE 0.0s
+# Copy package files
+COPY package*.json ./
 
-#4 [builder 1/7] FROM docker.io/library/node:20-alpine@sha256:eabac870db94f7342d6c33560d6613f188bbcf4bbe1f4eb47d5e2a08e1a37722
-#4 DONE 0.0s
+# Install dependencies
+RUN npm ci
 
-#5 [internal] load build context
-#5 transferring context: 4.11kB done
-#5 DONE 0.0s
+# Copy source code
+COPY . .
 
-#6 [stage-1 3/7] WORKDIR /app
-#6 CACHED
+# Build the application
+RUN npm run build
 
-#7 [stage-1 2/7] RUN apk add --no-cache     cairo     jpeg     pango     giflib     pixman
-#7 CACHED
+# Stage 2: Production image
+FROM node:20-alpine
 
-#8 [stage-1 4/7] COPY package*.json ./
-#8 CACHED
+# Install runtime dependencies for native modules
+RUN apk add --no-cache \
+    cairo \
+    jpeg \
+    pango \
+    giflib \
+    pixman
 
-#9 [builder 3/7] WORKDIR /app
-#9 CACHED
+WORKDIR /app
 
-#10 [builder 5/7] RUN npm ci
-#10 CACHED
+# Copy package files
+COPY package*.json ./
 
-#11 [builder 2/7] RUN apk add --no-cache     python3     make     g++     cairo-dev     jpeg-dev     pango-dev     giflib-dev     pixman-dev
-#11 CACHED
+# Install only production dependencies
+RUN npm ci --only=production
 
-#12 [builder 4/7] COPY package*.json ./
-#12 CACHED
+# Copy built assets from builder stage
+COPY --from=builder /app/dist ./dist
 
-#13 [builder 6/7] COPY . .
-#13 CACHED
+# Expose port
+EXPOSE 3000
 
-#14 [builder 7/7] RUN npm run build
-#14 CACHED
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-#15 [stage-1 5/7] RUN npm ci --only=production
-#15 CACHED
-
-#16 [stage-1 7/7] COPY --from=builder /app/server.js ./server.js 2>/dev/null || true
-#16 ERROR: failed to calculate checksum of ref 7f15017a-c17f-4735-b737-93d7fe6e3a3a::l45desqtpclq35cbbgnhzgzig: "/||": not found
-
-#17 [stage-1 6/7] COPY --from=builder /app/dist ./dist
-#17 CANCELED
-------
- > [stage-1 7/7] COPY --from=builder /app/server.js ./server.js 2>/dev/null || true:
-------
-Dockerfile:54
---------------------
-  52 |     
-  53 |     # Copy any server files if they exist
-  54 | >>> COPY --from=builder /app/server.js ./server.js 2>/dev/null || true
-  55 |     
-  56 |     # Expose port
---------------------
-ERROR: failed to build: failed to solve: failed to compute cache key: failed to calculate checksum of ref 7f15017a-c17f-4735-b737-93d7fe6e3a3a::l45desqtpclq35cbbgnhzgzig: "/||": not found
-##########################################
-### Error
-### Thu, 02 Oct 2025 17:45:30 GMT
-##########################################
-
-Command failed with exit code 1: docker buildx build --network host -f /etc/easypanel/projects/erp/app/code/Dockerfile -t easypanel/erp/app --label 'keep=true' --build-arg 'GIT_SHA=391a8a23fd4c174b848766b4459b7e316ca7ccf5' /etc/easypanel/projects/erp/app/code/
+# Start the application
+CMD ["npm", "run", "preview"]

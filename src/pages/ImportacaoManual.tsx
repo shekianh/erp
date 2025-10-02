@@ -1,5 +1,3 @@
-// src/pages/ImportacaoManual.tsx (VERSÃO CORRIGIDA E FINAL)
-
 import React, { useState, useRef, useEffect } from 'react';
 
 // --- ESTILOS ---
@@ -16,6 +14,9 @@ const styles: { [key: string]: React.CSSProperties } = {
     logBox: { background: '#2d2d2d', color: '#f8f8f2', padding: '15px', height: '300px', overflowY: 'auto', whiteSpace: 'pre-wrap', wordWrap: 'break-word', borderRadius: '5px', fontSize: '14px', marginTop: '10px' },
     processControl: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee' },
     spinner: { border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid #fff', borderRadius: '50%', width: '16px', height: '16px', animation: 'spin 1s linear infinite', marginRight: '8px' },
+    // Estilos para a nova barra de progresso
+    progressBarContainer: { width: '100%', backgroundColor: '#e0e0e0', borderRadius: '4px', marginTop: '15px', height: '25px', overflow: 'hidden' },
+    progressBar: { height: '100%', backgroundColor: '#007bff', width: '0%', transition: 'width 0.2s ease-in-out', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' },
 };
 const keyframes = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
 
@@ -31,6 +32,7 @@ function ImportacaoManual() {
     // Estados para logs e carregamento geral
     const [logs, setLogs] = useState(['Aguardando comando...']);
     const [isLoadingManual, setIsLoadingManual] = useState(false);
+    const [progress, setProgress] = useState(0); // NOVO ESTADO: Armazena o progresso (0 a 100)
     
     const eventSourceRef = useRef<EventSource | null>(null);
     const logBoxRef = useRef<HTMLPreElement>(null);
@@ -49,6 +51,7 @@ function ImportacaoManual() {
 
     const iniciarProcessoStreaming = (url: string) => {
         setIsLoadingManual(true);
+        setProgress(0); // Reseta o progresso ao iniciar um novo processo
         setLogs(['Iniciando conexão com o servidor...']);
         
         if (eventSourceRef.current) {
@@ -58,23 +61,33 @@ function ImportacaoManual() {
         const eventSource = new EventSource(url);
         eventSourceRef.current = eventSource;
 
-        // --- ESTA É A PARTE CORRIGIDA E MAIS IMPORTANTE ---
         eventSource.onmessage = (event) => {
             try {
-                // Tenta "desembrulhar" a mensagem JSON enviada pelo servidor
-                const message = JSON.parse(event.data);
-                
-                if (message === '__END__') {
+                const data = JSON.parse(event.data);
+
+                // NOVO: Verifica o tipo de mensagem recebida do servidor
+                if (data.type === 'progress') {
+                    setProgress(data.value); // Atualiza o estado do progresso
+                } else if (data.type === 'log') {
+                    adicionarLog(data.message); // Adiciona a mensagem aos logs
+                } else if (data.message === '__END__') {
                     adicionarLog("✅ Processo finalizado pelo servidor.");
+                    setProgress(100); // Garante que a barra chegue a 100%
                     eventSource.close();
                     setIsLoadingManual(false);
-                } else {
-                    // Adiciona a mensagem desembrulhada aos logs
-                    adicionarLog(message);
                 }
+
             } catch (error) {
                 // Ignora mensagens que não são JSON, como o 'keep-alive' do servidor
-                console.warn("Recebido dado não-JSON do servidor (provavelmente um keep-alive):", event.data);
+                // ou a mensagem final que pode não ser JSON
+                if (event.data === '__END__') {
+                     adicionarLog("✅ Processo finalizado pelo servidor.");
+                     setProgress(100);
+                     eventSource.close();
+                     setIsLoadingManual(false);
+                } else {
+                    console.warn("Recebido dado não-JSON do servidor (provavelmente um keep-alive):", event.data);
+                }
             }
         };
 
@@ -142,6 +155,15 @@ function ImportacaoManual() {
                 <button onClick={handleImportarNFe} disabled={isLoadingManual} style={{ ...styles.button, ...styles.buttonBlue, ...(isLoadingManual && styles.buttonDisabled) }}>
                     {isLoadingManual ? <><div style={styles.spinner}></div> Processando...</> : 'Importar NFe'}
                 </button>
+
+                {/* --- NOVA BARRA DE PROGRESSO --- */}
+                {isLoadingManual && (
+                    <div style={styles.progressBarContainer}>
+                        <div style={{ ...styles.progressBar, width: `${progress}%` }}>
+                            {progress.toFixed(0)}%
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div>

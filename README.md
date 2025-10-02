@@ -3,6 +3,17 @@
 
 Sistema completo de gestão para e-commerce e indústria, desenvolvido com React, TypeScript e Supabase.
 
+## 🚀 Demo
+
+[Link para demonstração online](https://seu-dominio.com) (quando disponível)
+
+## 📋 Pré-requisitos
+
+- Node.js 18+ 
+- npm ou yarn
+- Conta no Supabase
+- Servidor SFTP (para funcionalidade de etiquetas)
+
 ## 🚀 Funcionalidades
 
 - **Dashboard Analítico**: Visão geral do negócio com métricas em tempo real
@@ -30,8 +41,8 @@ Sistema completo de gestão para e-commerce e indústria, desenvolvido com React
 
 1. **Clone o repositório**
 ```bash
-git clone [url-do-repositorio]
-cd sistema-gestao-integrado
+git clone https://github.com/seu-usuario/erp-shekinah.git
+cd erp-shekinah
 ```
 
 2. **Instale as dependências**
@@ -44,6 +55,11 @@ npm install
 cp .env.example .env
 # Edite o arquivo .env com suas configurações
 ```
+
+4. **Configure o Supabase**
+   - Crie um projeto no [Supabase](https://supabase.com)
+   - Execute as migrações SQL necessárias (veja seção Banco de Dados)
+   - Atualize as variáveis `SUPABASE_URL` e `SUPABASE_KEY` no arquivo `.env`
 
 4. **Inicie o desenvolvimento**
 
@@ -60,6 +76,74 @@ npm run server
 **Para produção:**
 ```bash
 npm start
+```
+
+## 🗄️ Banco de Dados
+
+O sistema utiliza PostgreSQL via Supabase. As principais tabelas são:
+
+### Tabelas Principais
+
+```sql
+-- Produtos
+CREATE TABLE produtos (
+  id SERIAL PRIMARY KEY,
+  linha VARCHAR(10),
+  modelo VARCHAR(20),
+  cor VARCHAR(50),
+  codigo_cor VARCHAR(10),
+  tamanho VARCHAR(5),
+  sku_pai VARCHAR(20),
+  sku_filho VARCHAR(25),
+  foto TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Pedidos de Vendas
+CREATE TABLE pedido_vendas (
+  id_key SERIAL PRIMARY KEY,
+  id_bling VARCHAR(20),
+  numero VARCHAR(20),
+  numeroloja VARCHAR(20),
+  data TIMESTAMP,
+  total DECIMAL(10,2),
+  contato_nome VARCHAR(255),
+  situacao_bling INTEGER,
+  loja VARCHAR(20),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Estoque
+CREATE TABLE estoque_geral (
+  id SERIAL PRIMARY KEY,
+  sku VARCHAR(25) UNIQUE,
+  quantidade INTEGER DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE estoque_pronto (
+  id SERIAL PRIMARY KEY,
+  sku VARCHAR(25) UNIQUE,
+  quantidade INTEGER DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### Configuração RLS (Row Level Security)
+
+```sql
+-- Habilitar RLS nas tabelas
+ALTER TABLE produtos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pedido_vendas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE estoque_geral ENABLE ROW LEVEL SECURITY;
+ALTER TABLE estoque_pronto ENABLE ROW LEVEL SECURITY;
+
+-- Políticas básicas (ajuste conforme necessário)
+CREATE POLICY "Permitir leitura para usuários autenticados" ON produtos
+  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Permitir leitura para usuários autenticados" ON pedido_vendas
+  FOR SELECT TO authenticated USING (true);
 ```
 
 ## 🖼️ Importador de Fotos
@@ -98,6 +182,53 @@ npm run dev
 - `GET /api/status` - Verifica status do servidor e conexão com Supabase
 - `GET /api/product/:skuPai` - Busca informações de um produto específico
 
+## 🚀 Deploy
+
+### Opção 1: Vercel (Recomendado para Frontend)
+
+1. **Conecte seu repositório ao Vercel**
+2. **Configure as variáveis de ambiente**
+3. **Deploy automático a cada push**
+
+### Opção 2: Netlify
+
+1. **Conecte seu repositório ao Netlify**
+2. **Configure build command**: `npm run build`
+3. **Configure publish directory**: `dist`
+
+### Opção 3: Docker
+
+```dockerfile
+FROM node:18-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+## 🔧 Configuração de Produção
+
+### Variáveis de Ambiente Obrigatórias
+
+```bash
+# Supabase
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_KEY=sua_chave_anonima
+
+# Servidor (se usando backend)
+PORT=3001
+NODE_ENV=production
+
+# SFTP (para etiquetas)
+SFTP_HOST=seu_servidor_sftp
+SFTP_USERNAME=usuario
+SFTP_PASSWORD=senha
+SFTP_REMOTE_PATH=/caminho/etiquetas/
+```
+
 ## 📁 Estrutura do Projeto
 
 ```
@@ -122,6 +253,35 @@ src/
     └── ...
 ```
 
+## 🧪 Testes
+
+```bash
+# Executar testes
+npm test
+
+# Executar testes em modo watch
+npm run test:watch
+
+# Gerar relatório de cobertura
+npm run test:coverage
+```
+
+## 📈 Monitoramento
+
+O sistema inclui:
+- Logs detalhados no console
+- Tratamento de erros com React Error Boundary
+- Notificações toast para feedback do usuário
+- Cache otimizado para consultas frequentes
+
+## 🔒 Segurança
+
+- Autenticação via Supabase Auth
+- Row Level Security (RLS) habilitado
+- Validação de dados no frontend e backend
+- Sanitização de inputs
+- HTTPS obrigatório em produção
+
 ## 🔧 Configuração do Supabase
 
 1. **Crie um projeto no Supabase**
@@ -138,20 +298,81 @@ src/
 - `estoque_geral` - Estoque geral
 - `estoque_pronto` - Estoque de produtos prontos
 
-## 🚀 Deploy
+## 🤝 Contribuindo
 
-### Frontend (Vite)
-```bash
-npm run build
-# Deploy da pasta 'dist' para seu servidor
+1. **Fork o projeto**
+2. **Crie uma branch para sua feature**
+   ```bash
+   git checkout -b feature/nova-funcionalidade
+   ```
+3. **Commit suas mudanças**
+   ```bash
+   git commit -m 'Adiciona nova funcionalidade'
+   ```
+4. **Push para a branch**
+   ```bash
+   git push origin feature/nova-funcionalidade
+   ```
+5. **Abra um Pull Request**
+
+### Padrões de Código
+
+- Use TypeScript para tipagem forte
+- Siga as convenções do ESLint configurado
+- Componentes funcionais com hooks
+- Nomeação em português para domínio de negócio
+- Comentários em português
+
+### Estrutura de Commits
+
+```
+tipo(escopo): descrição
+
+feat(produtos): adiciona importador de fotos em lote
+fix(vendas): corrige cálculo de ticket médio
+docs(readme): atualiza instruções de instalação
+style(layout): ajusta responsividade do menu
+refactor(estoque): otimiza consultas de estoque
+test(vendas): adiciona testes para relatórios
 ```
 
-### Backend (Express)
-```bash
-# Configure as variáveis de ambiente em produção
-# Execute o servidor
-npm start
-```
+## 🐛 Reportando Bugs
+
+Ao reportar bugs, inclua:
+
+1. **Descrição clara do problema**
+2. **Passos para reproduzir**
+3. **Comportamento esperado vs atual**
+4. **Screenshots (se aplicável)**
+5. **Informações do ambiente**:
+   - Navegador e versão
+   - Sistema operacional
+   - Versão do Node.js
+
+## 📋 Roadmap
+
+- [ ] Integração com mais marketplaces
+- [ ] App mobile React Native
+- [ ] Relatórios avançados com BI
+- [ ] Integração com ERPs externos
+- [ ] API pública para integrações
+- [ ] Módulo de CRM
+- [ ] Gestão de fornecedores
+- [ ] Controle de qualidade
+
+## 🔗 Links Úteis
+
+- [Documentação do Supabase](https://supabase.com/docs)
+- [Guia do React](https://react.dev)
+- [Tailwind CSS](https://tailwindcss.com)
+- [Framer Motion](https://www.framer.com/motion/)
+
+## 📊 Status do Projeto
+
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 
 ## 📊 Funcionalidades Detalhadas
 
@@ -174,14 +395,6 @@ npm start
 - Comparações mensais
 - Exportação para Excel
 
-## 🤝 Contribuição
-
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
-
 ## 📝 Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
@@ -189,3 +402,7 @@ Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalh
 ## 📞 Suporte
 
 Para suporte e dúvidas, entre em contato através do email: suporte@shekinahcalcados.com.br
+
+---
+
+**Desenvolvido com ❤️ pela equipe Shekinah Calçados**

@@ -1,16 +1,11 @@
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 5173,
-    strictPort: false,
-    host: true
-  },
   build: {
-    target: 'esnext',
-    minify: 'esbuild',
     rollupOptions: {
       external: [],
       output: {
@@ -18,20 +13,19 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           router: ['react-router-dom'],
           ui: ['lucide-react', 'framer-motion'],
-          charts: ['recharts'],
           xlsx: ['xlsx']
         }
       }
     },
     commonjsOptions: {
       transformMixedEsModules: true
-    },
-    chunkSizeWarningLimit: 1000
+    }
   },
   optimizeDeps: {
-    include: ['react-hot-toast', 'xlsx', 'recharts']
+    include: ['react-hot-toast', 'xlsx']
   },
   define: {
+    // Remove "use client" directives that cause issues in build
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
   }
 })

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Printer, SquareCheck as CheckSquare, Square, Download, Filter, RefreshCw, CheckCircle2, Eye, ArrowUpDown, Info, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { supabase, obterNomeLoja } from '../lib/supabase'
+import { supabase } from '../lib/supabase' // Assumindo que você tem um export de 'obterNomeLoja' aqui também
 import OrderItemsModal from '../components/OrderItemsModal'
 import toast from 'react-hot-toast'
 
@@ -29,11 +29,35 @@ const LOJAS_PERMITIDAS: Record<string, string> = {
 const SHOPEE_ID = '203944379';
 const TAMANHO_PAGINA = 300;
 
-// --- FUNÇÃO AUXILIAR PARA BAIXAR ZPL ---
+// --- FUNÇÕES AUXILIARES DE API ---
 
+// <<-- ADIÇÃO: Nova função auxiliar para ENVIAR ZPL para a fila de impressão do servidor -->>
+const enviarZplParaFilaDeImpressao = async (zplContent: string) => {
+  try {
+    const response = await fetch('http://localhost:3001/api/queue/add-print-job', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ zpl: zplContent }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Falha ao adicionar trabalho à fila.');
+    }
+
+    const result = await response.json();
+    toast.success(`Enviado para a fila de impressão! O agente local irá processar.`, { duration: 4000 });
+    return true;
+  } catch (error) {
+    console.error('Erro ao enviar para a fila:', error);
+    toast.error(`Erro ao enviar para fila: ${error instanceof Error ? error.message : 'Verifique o console'}`);
+    return false;
+  }
+};
+
+// Função original para BAIXAR o arquivo ZPL localmente
 const baixarZPLDaPasta = async (lojaId: string, numeroPedidoLoja: string) => {
   try {
-    // ROTA CHAMADA: GET /api/zpl/:lojaId/:numeroPedidoLoja
     const response = await fetch(`http://localhost:3001/api/zpl/${lojaId}/${numeroPedidoLoja}`);
     if (!response.ok) throw new Error(`Arquivo ZPL não encontrado (Pedido: ${numeroPedidoLoja})`);
     const zplContent = await response.text();
@@ -53,14 +77,12 @@ const baixarZPLDaPasta = async (lojaId: string, numeroPedidoLoja: string) => {
 
 
 // --- COMPONENTE PRINCIPAL ---
-
 const ProcessamentoPedido: React.FC = () => {
   // --- ESTADOS DO COMPONENTE ---
   const [dados, setDados] = useState<ProcessamentoPedidoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [activeTab, setActiveTab] = useState<string>('');
-  const [selectAllAcrossPages, setSelectAllAcrossPages] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState(0);
   const [totalPedidos, setTotalPedidos] = useState(0);
   
@@ -81,10 +103,9 @@ const ProcessamentoPedido: React.FC = () => {
 
   const lojas = Object.entries(LOJAS_PERMITIDAS).map(([id, nome]) => ({ id, nome }));
   const totalPaginas = Math.ceil(totalPedidos / TAMANHO_PAGINA);
-  const selectionCount = selectAllAcrossPages ? totalPedidos : selectedItems.size;
+  const selectionCount = selectedItems.size;
 
   // --- FUNÇÕES AUXILIARES ---
-
   const getInitialDate = (offsetDays = 0) => {
     const date = new Date(); date.setDate(date.getDate() - offsetDays);
     return date.toISOString().split('T')[0];
@@ -113,7 +134,6 @@ const ProcessamentoPedido: React.FC = () => {
   };
 
   // --- LÓGICA DE BUSCA DE DADOS ---
-
   const combinarComDadosImpressao = async (notas: Omit<ProcessamentoPedidoData, 'baixados' | 'situacao_impressa' | 'situacao_bling'>[]): Promise<any[]> => {
     if (notas.length === 0) return [];
     const numerosDePedido = notas.map(nf => nf.numero_pedido_loja).filter(Boolean);
@@ -176,28 +196,35 @@ const ProcessamentoPedido: React.FC = () => {
     if (!activeTab) return;
     setLoading(true);
     setDados([]);
-    if (!selectAllAcrossPages) setSelectedItems(new Set());
+    
     const from = pagina * TAMANHO_PAGINA;
     const to = from + TAMANHO_PAGINA - 1;
     const query = construirQueryBase(false).order(ordenacao.campo, { ascending: ordenacao.direcao === 'asc' }).range(from, to);
     const { data: notasFiscais, error } = await query;
+
     if (error) { toast.error("Erro ao carregar dados da página."); setLoading(false); return; }
+
     let dadosCombinados = await combinarComDadosImpressao(notasFiscais || []);
     dadosCombinados = await combinarComDadosPedido(dadosCombinados);
     const dadosFinais = aplicarFiltroDeStatus(dadosCombinados);
+
     setDados(dadosFinais);
     setLoading(false);
-  }, [construirQueryBase, ordenacao, activeTab, selectAllAcrossPages]);
+  }, [construirQueryBase, ordenacao, activeTab]);
   
   const executarBusca = useCallback(async () => {
     if (!activeTab) return;
     setLoading(true);
-    setSelectAllAcrossPages(false);
+    setSelectedItems(new Set());
+    
     const queryContagem = construirQueryBase(true);
     const { count, error } = await queryContagem;
+
     if (error) { toast.error("Erro ao contar os pedidos."); setLoading(false); return; }
+
     setTotalPedidos(count || 0);
     setPaginaAtual(0);
+
     if (count && count > 0) {
       await carregarDadosDaPagina(0);
     } else {
@@ -211,7 +238,6 @@ const ProcessamentoPedido: React.FC = () => {
   };
   
   // --- EFEITOS (useEffect) ---
-
   useEffect(() => {
     if (lojas.length > 0 && !activeTab) setActiveTab(lojas[0].id);
   }, [lojas, activeTab]);
@@ -234,7 +260,6 @@ const ProcessamentoPedido: React.FC = () => {
   }, [appliedFilters, activeTab, ordenacao, executarBusca]);
   
   // --- HANDLERS DE EVENTOS ---
-
   const handleMudarPagina = (novaPagina: number) => {
     if (novaPagina < 0 || novaPagina >= totalPaginas) return;
     setPaginaAtual(novaPagina);
@@ -242,12 +267,6 @@ const ProcessamentoPedido: React.FC = () => {
   };
 
   const handleSelectItem = (id: number, event: React.MouseEvent) => {
-    if (selectAllAcrossPages) {
-      setSelectAllAcrossPages(false);
-      const newSelected = new Set<number>(); newSelected.add(id);
-      setSelectedItems(newSelected);
-      return;
-    }
     const newSelected = new Set(selectedItems);
     if (event.shiftKey && selectedItems.size > 0) {
       const todosIds = dados.map(item => item.id_key);
@@ -264,75 +283,22 @@ const ProcessamentoPedido: React.FC = () => {
   };
 
   const handleSelectPage = () => {
-    setSelectAllAcrossPages(false);
-    if (selectedItems.size === dados.length) setSelectedItems(new Set());
-    else setSelectedItems(new Set(dados.map(item => item.id_key)));
-  };
-  
-  const handleSelectAllPages = () => {
-    setSelectAllAcrossPages(true);
-    setSelectedItems(new Set());
-  };
+    const currentPageIds = dados.map(item => item.id_key);
+    const allOnPageSelected = currentPageIds.length > 0 && currentPageIds.every(id => selectedItems.has(id));
+    const newSelected = new Set(selectedItems);
 
-  const handleClearSelection = () => {
-    setSelectAllAcrossPages(false);
-    setSelectedItems(new Set());
-  };
-
-  const handleImprimirItem = async (item: ProcessamentoPedidoData) => {
-    toast.loading('Buscando etiqueta ZPL...');
-    const sucesso = await baixarZPLDaPasta(item.loja_id, item.numero_pedido_loja);
-    toast.dismiss();
-    if (sucesso) executarBusca();
-  };
-  
-  const handleImprimirSelecionados = async () => {
-    if (selectionCount === 0) return toast.error('Selecione pelo menos um item para imprimir');
-    toast.loading('Processando e combinando etiquetas...');
-    try {
-      let response;
-      if (selectAllAcrossPages) {
-        // ROTA CHAMADA: POST /api/etiquetas/zpl-lote-por-filtro
-        response = await fetch('http://localhost:3001/api/etiquetas/zpl-lote-por-filtro', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filtros: { ...appliedFilters, loja_id: activeTab } })
-        });
-      } else {
-        const itensParaProcessar = dados.filter(item => selectedItems.has(item.id_key)).map(item => ({ loja_id: item.loja_id, numero_pedido_loja: item.numero_pedido_loja }));
-        // ROTA CHAMADA: POST /api/etiquetas/zpl-lote
-        response = await fetch('http://localhost:3001/api/etiquetas/zpl-lote', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pedidos: itensParaProcessar })
-        });
-      }
-      if (!response.ok) { 
-        const errorData = await response.json(); 
-        throw new Error(errorData.message || 'Falha ao gerar o lote de ZPL.'); 
-      }
-      const zplContentCombinado = await response.text();
-      const blob = new Blob([zplContentCombinado], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `lote_etiquetas_${Date.now()}.zpl`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-      toast.dismiss();
-      toast.success(`${selectionCount} etiquetas combinadas e baixadas!`);
-      handleClearSelection();
-      if (selectAllAcrossPages && appliedFilters.statusImpressao) {
-        const novosFiltros = { ...appliedFilters, statusImpressao: '' };
-        setFiltros(novosFiltros);
-        setAppliedFilters(novosFiltros);
-      } else {
-        executarBusca();
-      }
-    } catch (error) { 
-      toast.dismiss();
-      const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido';
-      toast.error(`Erro ao processar lote: ${errorMessage}`);
+    if (allOnPageSelected) {
+      currentPageIds.forEach(id => newSelected.delete(id));
+    } else {
+      currentPageIds.forEach(id => newSelected.add(id));
     }
+    setSelectedItems(newSelected);
   };
   
+  const handleClearSelection = () => {
+    setSelectedItems(new Set());
+  };
+
   const handleVisualizarItens = (numeroPedidoLoja: string) => { setSelectedPedidoLoja(numeroPedidoLoja); setShowItemsModal(true); };
   
   const limparFiltros = () => {
@@ -354,8 +320,147 @@ const ProcessamentoPedido: React.FC = () => {
     return ordenacao.direcao === 'asc' ? <ArrowUpDown className="h-4 w-4 text-blue-600 rotate-180" /> : <ArrowUpDown className="h-4 w-4 text-blue-600" />;
   };
 
-  // --- RENDERIZAÇÃO DO COMPONENTE (JSX) ---
+  const allOnPageSelected = dados.length > 0 && dados.every(item => selectedItems.has(item.id_key));
 
+  // --- HANDLERS DE AÇÕES (DOWNLOAD vs IMPRESSÃO) ---
+
+  // Ação de BAIXAR ZPL individual
+  const handleBaixarItem = async (item: ProcessamentoPedidoData) => {
+    toast.loading('Buscando etiqueta ZPL para download...');
+    const sucesso = await baixarZPLDaPasta(item.loja_id, item.numero_pedido_loja);
+    toast.dismiss();
+    if (sucesso) executarBusca();
+  };
+  
+  // <<-- ADIÇÃO: Ação de IMPRIMIR ZPL individual via agente -->>
+  const handleImprimirViaAgenteIndividual = async (item: ProcessamentoPedidoData) => {
+    toast.loading('Buscando ZPL para enviar à impressora...');
+    try {
+      const response = await fetch(`http://localhost:3001/api/zpl/${item.loja_id}/${item.numero_pedido_loja}`);
+      if (!response.ok) throw new Error(`Arquivo ZPL não encontrado (Pedido: ${item.numero_pedido_loja})`);
+      const zplContent = await response.text();
+      toast.dismiss();
+      
+      const sucesso = await enviarZplParaFilaDeImpressao(zplContent);
+      if (sucesso) executarBusca();
+    } catch (error) {
+      toast.dismiss();
+      toast.error(`Erro: ${error instanceof Error ? error.message : 'Ocorreu um erro desconhecido'}`);
+    }
+  };
+  
+  // Ação de BAIXAR LOTE de ZPLs
+  const handleBaixarLote = async () => {
+    if (selectedItems.size === 0) return toast.error('Selecione pelo menos um item para baixar');
+    toast.loading('Buscando dados dos pedidos selecionados...');
+    try {
+        const selectedIds = Array.from(selectedItems);
+        let itensParaProcessar: { loja_id: string, numero_pedido_loja: string }[] = [];
+        const batchSize = 500;
+
+        for (let i = 0; i < selectedIds.length; i += batchSize) {
+            const idLote = selectedIds.slice(i, i + batchSize);
+            const { data, error } = await supabase.from('nota_fiscal').select('loja_id, numero_pedido_loja').in('id_key', idLote);
+            if (error) throw new Error(`Falha ao buscar detalhes dos pedidos: ${error.message}`);
+            if (data) itensParaProcessar.push(...data.map(item => ({loja_id: item.loja_id, numero_pedido_loja: item.numero_pedido_loja})));
+        }
+        
+        toast.dismiss();
+        toast.loading('Processando e combinando etiquetas para download...');
+
+        const response = await fetch('http://localhost:3001/api/etiquetas/zpl-lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pedidos: itensParaProcessar })
+        });
+
+        if (!response.ok) { 
+            const errorData = await response.json(); 
+            throw new Error(errorData.message || 'Falha ao gerar o lote de ZPL.'); 
+        }
+
+        const result = await response.json();
+        const { zplData, processedCount, skippedCount } = result;
+        toast.dismiss();
+
+        if (processedCount > 0) {
+            const blob = new Blob([zplData], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `lote_etiquetas_${Date.now()}.zpl`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+            toast.success(`${processedCount} etiquetas combinadas e baixadas!`);
+        } else {
+             toast.error('Nenhuma etiqueta pôde ser processada. Verifique se já foram geradas.');
+        }
+
+        if (skippedCount > 0) {
+            toast(`${skippedCount} etiquetas foram ignoradas pois o arquivo ZPL não foi encontrado.`, { 
+              duration: 6000,
+              icon: '⚠️' 
+            });
+        }
+        
+        handleClearSelection();
+        executarBusca();
+
+    } catch (error) { 
+        toast.dismiss();
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido';
+        toast.error(`Erro ao processar lote: ${errorMessage}`);
+    }
+  };
+  
+  // <<-- ADIÇÃO: Ação de IMPRIMIR LOTE de ZPLs via agente -->>
+  const handleImprimirLoteViaAgente = async () => {
+    if (selectedItems.size === 0) return toast.error('Selecione pelo menos um item para imprimir');
+    toast.loading('Buscando e combinando etiquetas para impressão...');
+    try {
+        const selectedIds = Array.from(selectedItems);
+        let itensParaProcessar: { loja_id: string, numero_pedido_loja: string }[] = [];
+        const batchSize = 500;
+
+        for (let i = 0; i < selectedIds.length; i += batchSize) {
+            const idLote = selectedIds.slice(i, i + batchSize);
+            const { data, error } = await supabase.from('nota_fiscal').select('loja_id, numero_pedido_loja').in('id_key', idLote);
+            if (error) throw new Error(`Falha ao buscar detalhes: ${error.message}`);
+            if (data) itensParaProcessar.push(...data.map(item => ({loja_id: item.loja_id, numero_pedido_loja: item.numero_pedido_loja})));
+        }
+        
+        const response = await fetch('http://localhost:3001/api/etiquetas/zpl-lote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pedidos: itensParaProcessar })
+        });
+
+        if (!response.ok) { 
+            const errorData = await response.json(); 
+            throw new Error(errorData.message || 'Falha ao gerar o lote de ZPL.'); 
+        }
+
+        const result = await response.json();
+        const { zplData, processedCount, skippedCount } = result;
+        toast.dismiss();
+
+        if (processedCount > 0) {
+            await enviarZplParaFilaDeImpressao(zplData);
+        } else {
+            toast.error('Nenhuma etiqueta pôde ser processada para impressão.');
+        }
+
+        if (skippedCount > 0) {
+            toast(`${skippedCount} etiquetas foram ignoradas (arquivo não encontrado).`, { icon: '⚠️' });
+        }
+        
+        handleClearSelection();
+        executarBusca();
+    } catch (error) { 
+        toast.dismiss();
+        const errorMessage = error instanceof Error ? error.message : 'Ocorreu um erro desconhecido';
+        toast.error(`Erro ao processar lote para impressão: ${errorMessage}`);
+    }
+  };
+
+  // --- RENDERIZAÇÃO DO COMPONENTE (JSX) ---
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
@@ -399,20 +504,46 @@ const ProcessamentoPedido: React.FC = () => {
         
         <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 flex-wrap">{selectAllAcrossPages ? (<div className="bg-blue-100 text-blue-800 text-sm font-medium px-4 py-2 rounded-lg flex items-center w-full sm:w-auto"><CheckSquare className="h-5 w-5 mr-2" /><span className="flex-grow">Todos os {totalPedidos} pedidos estão selecionados.</span><button onClick={handleClearSelection} className="ml-3 text-blue-800 hover:text-blue-900" title="Limpar seleção"><X className="h-5 w-5" /></button></div>) : (<><div className="flex items-center gap-3"><button onClick={handleSelectPage} className="flex items-center text-sm text-gray-600 hover:text-gray-900">{selectedItems.size === dados.length && dados.length > 0 ? <CheckSquare className="h-4 w-4 mr-1" /> : <Square className="h-4 w-4 mr-1" />}Selecionar página ({dados.length})</button>{totalPedidos > dados.length && (<button onClick={handleSelectAllPages} className="text-sm font-medium text-blue-600 hover:text-blue-800">Selecionar todos ({totalPedidos})</button>)}</div>{selectionCount > 0 && (<span className="text-sm text-gray-700 font-medium">{selectionCount} item(s) selecionado(s)</span>)}</>)}</div>
-                <div className="flex flex-col sm:flex-row items-center gap-2"><div className="flex items-center text-xs text-gray-500 bg-gray-100 p-2 rounded-lg w-full sm:w-auto"><Info className="h-4 w-4 mr-2 text-blue-500 flex-shrink-0"/><span>Use Shift+Click para selecionar intervalos</span></div>{selectionCount > 0 && (<button onClick={handleImprimirSelecionados} className="flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><Download className="h-4 w-4 mr-2" /> Baixar Lote ({selectionCount})</button>)}</div>
+                <div className="flex items-center gap-4 flex-wrap">
+                    <button onClick={handleSelectPage} className="flex items-center text-sm text-gray-600 hover:text-gray-900">
+                        {allOnPageSelected ? <CheckSquare className="h-4 w-4 mr-1.5 text-blue-600" /> : <Square className="h-4 w-4 mr-1.5" />}
+                        {allOnPageSelected ? 'Desmarcar página' : 'Marcar página'} ({dados.length})
+                    </button>
+                    {selectionCount > 0 && (
+                        <div className="flex items-center gap-3">
+                           <span className="text-sm text-gray-700 font-medium bg-blue-100 text-blue-800 px-3 py-1 rounded-full">{selectionCount} item(s) selecionado(s)</span>
+                           <button onClick={handleClearSelection} className="text-sm font-medium text-red-600 hover:text-red-800" title="Limpar seleção">Limpar</button>
+                        </div>
+                    )}
+                </div>
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <div className="flex items-center text-xs text-gray-500 bg-gray-100 p-2 rounded-lg w-full sm:w-auto">
+                        <Info className="h-4 w-4 mr-2 text-blue-500 flex-shrink-0"/>
+                        <span>Use Shift+Click para selecionar intervalos</span>
+                    </div>
+                    {selectionCount > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap justify-center">
+                            <button onClick={handleBaixarLote} className="flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                                <Download className="h-4 w-4 mr-2" /> Baixar Lote ({selectionCount})
+                            </button>
+                            <button onClick={handleImprimirLoteViaAgente} className="flex items-center justify-center w-full sm:w-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                                <Printer className="h-4 w-4 mr-2" /> Imprimir Lote ({selectionCount})
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
 
         <div className="overflow-x-auto hidden md:block">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seleção</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleOrdenacao('numero_nf')}><div className="flex items-center">Número NF {getOrdenacaoIcon('numero_nf')}</div></th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nº Pedido Loja</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleOrdenacao('data_emissao')}><div className="flex items-center">Data Emissão {getOrdenacaoIcon('data_emissao')}</div></th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Situação NF</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Situação Pedido</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleOrdenacao('valor_nota')}><div className="flex items-center">Valor {getOrdenacaoIcon('valor_nota')}</div></th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleOrdenacao('contato_nome')}><div className="flex items-center">Cliente {getOrdenacaoIcon('contato_nome')}</div></th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleOrdenacao('baixados')}><div className="flex items-center">Downloads {getOrdenacaoIcon('baixados')}</div></th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status Impressão</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th></tr></thead>
-            <tbody className="bg-white divide-y divide-gray-200">{loading ? (<tr><td colSpan={11} className="px-6 py-12 text-center"><div className="flex items-center justify-center"><RefreshCw className="h-6 w-6 animate-spin text-blue-600 mr-2" /><span className="text-gray-500">Carregando...</span></div></td></tr>) : dados.length === 0 ? (<tr><td colSpan={11} className="px-6 py-12 text-center text-gray-500">Nenhum registro encontrado.</td></tr>) : (dados.map((item) => {const situacaoInfo = getSituacaoNotaInfo(item.situacao); const situacaoPedidoInfo = getSituacaoPedidoInfo(item.situacao_bling); const isSelected = selectAllAcrossPages || selectedItems.has(item.id_key); return (<tr key={item.id_key} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}><td className="px-6 py-4 whitespace-nowrap"><button onClick={(e) => handleSelectItem(item.id_key, e)}>{isSelected ? <CheckSquare className="h-5 w-5 text-blue-600" /> : <Square className="h-5 w-5 text-gray-400" />}</button></td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.numero_nf}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.numero_pedido_loja}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{new Date(item.data_emissao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}</td><td className="px-6 py-4 whitespace-nowrap"><span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoInfo.color} ${situacaoInfo.textColor}`}>{situacaoInfo.label}</span></td><td className="px-6 py-4 whitespace-nowrap"><span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoPedidoInfo.color} ${situacaoPedidoInfo.textColor}`}>{situacaoPedidoInfo.label}</span></td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R$ {item.valor_nota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 max-w-xs truncate">{item.contato_nome}</td><td className="px-6 py-4 whitespace-nowrap"><div className="flex items-center text-gray-600" title={`${item.baixados || 0} downloads`}><Printer className="h-5 w-5 mr-2" /><span className={`font-bold text-sm rounded-full px-2 py-0.5 ${ (item.baixados || 0) > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700' }`}>{item.baixados || 0}</span></div></td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.situacao_impressa === 'Impresso' ? ( <span className="flex items-center text-green-700"><CheckCircle2 className="h-4 w-4 mr-1.5" />Impresso</span> ) : item.situacao_impressa === 'Reimpresso' ? ( <span className="flex items-center text-blue-700"><RefreshCw className="h-4 w-4 mr-1.5" />Reimpresso</span> ) : ( <span className="text-gray-500">Pendente</span> )}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex space-x-2"><button onClick={() => handleImprimirItem(item)} className="text-blue-600 hover:text-blue-900" title="Baixar ZPL da pasta"><Download className="h-5 w-5" /></button><button onClick={() => handleVisualizarItens(item.numero_pedido_loja)} className="text-green-600 hover:text-green-900" title="Ver itens do pedido"><Eye className="h-5 w-5" /></button></div></td></tr>)}))}</tbody>
+            <tbody className="bg-white divide-y divide-gray-200">{loading ? (<tr><td colSpan={11} className="px-6 py-12 text-center"><div className="flex items-center justify-center"><RefreshCw className="h-6 w-6 animate-spin text-blue-600 mr-2" /><span className="text-gray-500">Carregando...</span></div></td></tr>) : dados.length === 0 ? (<tr><td colSpan={11} className="px-6 py-12 text-center text-gray-500">Nenhum registro encontrado.</td></tr>) : (dados.map((item) => {const situacaoInfo = getSituacaoNotaInfo(item.situacao); const situacaoPedidoInfo = getSituacaoPedidoInfo(item.situacao_bling); const isSelected = selectedItems.has(item.id_key); return (<tr key={item.id_key} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}><td className="px-6 py-4 whitespace-nowrap"><button onClick={(e) => handleSelectItem(item.id_key, e)}>{isSelected ? <CheckSquare className="h-5 w-5 text-blue-600" /> : <Square className="h-5 w-5 text-gray-400" />}</button></td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.numero_nf}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.numero_pedido_loja}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{new Date(item.data_emissao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}</td><td className="px-6 py-4 whitespace-nowrap"><span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoInfo.color} ${situacaoInfo.textColor}`}>{situacaoInfo.label}</span></td><td className="px-6 py-4 whitespace-nowrap"><span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoPedidoInfo.color} ${situacaoPedidoInfo.textColor}`}>{situacaoPedidoInfo.label}</span></td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R$ {item.valor_nota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 max-w-xs truncate">{item.contato_nome}</td><td className="px-6 py-4 whitespace-nowrap"><div className="flex items-center text-gray-600" title={`${item.baixados || 0} downloads`}><Printer className="h-5 w-5 mr-2" /><span className={`font-bold text-sm rounded-full px-2 py-0.5 ${ (item.baixados || 0) > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700' }`}>{item.baixados || 0}</span></div></td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.situacao_impressa === 'Impresso' ? ( <span className="flex items-center text-green-700"><CheckCircle2 className="h-4 w-4 mr-1.5" />Impresso</span> ) : item.situacao_impressa === 'Reimpresso' ? ( <span className="flex items-center text-blue-700"><RefreshCw className="h-4 w-4 mr-1.5" />Reimpresso</span> ) : ( <span className="text-gray-500">Pendente</span> )}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><div className="flex space-x-2"><button onClick={() => handleImprimirViaAgenteIndividual(item)} className="text-green-600 hover:text-green-900" title="Imprimir ZPL via Agente"><Printer className="h-5 w-5" /></button><button onClick={() => handleBaixarItem(item)} className="text-blue-600 hover:text-blue-900" title="Baixar arquivo ZPL"><Download className="h-5 w-5" /></button><button onClick={() => handleVisualizarItens(item.numero_pedido_loja)} className="text-gray-600 hover:text-gray-900" title="Ver itens do pedido"><Eye className="h-5 w-5" /></button></div></td></tr>)}))}</tbody>
           </table>
         </div>
 
         <div className="block md:hidden space-y-4">
-            {loading ? (<div className="px-6 py-12 text-center"><div className="flex items-center justify-center"><RefreshCw className="h-6 w-6 animate-spin text-blue-600 mr-2" /><span className="text-gray-500">Carregando...</span></div></div>) : dados.length === 0 ? (<div className="px-6 py-12 text-center text-gray-500">Nenhum registro encontrado.</div>) : (dados.map(item => {const situacaoInfo = getSituacaoNotaInfo(item.situacao); const situacaoPedidoInfo = getSituacaoPedidoInfo(item.situacao_bling); const isSelected = selectAllAcrossPages || selectedItems.has(item.id_key); return (<div key={item.id_key} className={`p-4 rounded-lg border space-y-3 ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`}><div className="flex justify-between items-center"><button onClick={(e) => handleSelectItem(item.id_key, e)} className="text-blue-600 hover:text-blue-900 flex items-center gap-2">{isSelected ? <CheckSquare className="h-6 w-6" /> : <Square className="h-6 w-6" />}<span className="font-bold text-gray-800 text-lg">{item.numero_pedido_loja}</span></button><div className="flex space-x-3"><button onClick={() => handleImprimirItem(item)} className="text-blue-600 hover:text-blue-900" title="Baixar ZPL da pasta"><Download className="h-5 w-5" /></button><button onClick={() => handleVisualizarItens(item.numero_pedido_loja)} className="text-green-600 hover:text-green-900" title="Ver itens do pedido"><Eye className="h-5 w-5" /></button></div></div><div className="text-sm text-gray-700 space-y-2"><div className="flex justify-between"><span className="text-gray-500">Cliente:</span> <span className="font-medium text-right truncate">{item.contato_nome}</span></div><div className="flex justify-between"><span className="text-gray-500">Data:</span> <span className="font-medium">{new Date(item.data_emissao).toLocaleDateString('pt-BR')}</span></div><div className="flex justify-between"><span className="text-gray-500">Valor:</span> <span className="font-medium">R$ {item.valor_nota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Situação NF:</span> <span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoInfo.textColor} ${situacaoInfo.color}`}>{situacaoInfo.label}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Situação Pedido:</span><span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoPedidoInfo.color} ${situacaoPedidoInfo.textColor}`}>{situacaoPedidoInfo.label}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Status:</span><span className="text-sm font-medium">{item.situacao_impressa === 'Impresso' ? <span className="flex items-center text-green-700"><CheckCircle2 className="h-4 w-4 mr-1.5" />Impresso</span>: item.situacao_impressa === 'Reimpresso' ? <span className="flex items-center text-blue-700"><RefreshCw className="h-4 w-4 mr-1.5" />Reimpresso</span>: <span className="text-gray-500">Pendente</span>}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Downloads:</span><div className="flex items-center text-gray-600" title={`${item.baixados || 0} downloads`}><Printer className="h-5 w-5 mr-2" /><span className={`font-bold text-sm rounded-full px-2 py-0.5 ${ (item.baixados || 0) > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700' }`}>{item.baixados || 0}</span></div></div></div></div>)}))}
+            {loading ? (<div className="px-6 py-12 text-center"><div className="flex items-center justify-center"><RefreshCw className="h-6 w-6 animate-spin text-blue-600 mr-2" /><span className="text-gray-500">Carregando...</span></div></div>) : dados.length === 0 ? (<div className="px-6 py-12 text-center text-gray-500">Nenhum registro encontrado.</div>) : (dados.map(item => {const situacaoInfo = getSituacaoNotaInfo(item.situacao); const situacaoPedidoInfo = getSituacaoPedidoInfo(item.situacao_bling); const isSelected = selectedItems.has(item.id_key); return (<div key={item.id_key} className={`p-4 rounded-lg border space-y-3 ${isSelected ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`}><div className="flex justify-between items-center"><button onClick={(e) => handleSelectItem(item.id_key, e)} className="text-blue-600 hover:text-blue-900 flex items-center gap-2">{isSelected ? <CheckSquare className="h-6 w-6" /> : <Square className="h-6 w-6" />}<span className="font-bold text-gray-800 text-lg">{item.numero_pedido_loja}</span></button><div className="flex space-x-3"><button onClick={() => handleImprimirViaAgenteIndividual(item)} className="text-green-600 hover:text-green-900" title="Imprimir ZPL via Agente"><Printer className="h-5 w-5" /></button><button onClick={() => handleBaixarItem(item)} className="text-blue-600 hover:text-blue-900" title="Baixar arquivo ZPL"><Download className="h-5 w-5" /></button><button onClick={() => handleVisualizarItens(item.numero_pedido_loja)} className="text-gray-600 hover:text-gray-900" title="Ver itens do pedido"><Eye className="h-5 w-5" /></button></div></div><div className="text-sm text-gray-700 space-y-2"><div className="flex justify-between"><span className="text-gray-500">Cliente:</span> <span className="font-medium text-right truncate">{item.contato_nome}</span></div><div className="flex justify-between"><span className="text-gray-500">Data:</span> <span className="font-medium">{new Date(item.data_emissao).toLocaleDateString('pt-BR')}</span></div><div className="flex justify-between"><span className="text-gray-500">Valor:</span> <span className="font-medium">R$ {item.valor_nota.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Situação NF:</span> <span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoInfo.textColor} ${situacaoInfo.color}`}>{situacaoInfo.label}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Situação Pedido:</span><span className={`text-xs font-medium px-2 py-1 rounded-full ${situacaoPedidoInfo.color} ${situacaoPedidoInfo.textColor}`}>{situacaoPedidoInfo.label}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Status:</span><span className="text-sm font-medium">{item.situacao_impressa === 'Impresso' ? <span className="flex items-center text-green-700"><CheckCircle2 className="h-4 w-4 mr-1.5" />Impresso</span>: item.situacao_impressa === 'Reimpresso' ? <span className="flex items-center text-blue-700"><RefreshCw className="h-4 w-4 mr-1.5" />Reimpresso</span>: <span className="text-gray-500">Pendente</span>}</span></div><div className="flex justify-between items-center"><span className="text-gray-500">Downloads:</span><div className="flex items-center text-gray-600" title={`${item.baixados || 0} downloads`}><Printer className="h-5 w-5 mr-2" /><span className={`font-bold text-sm rounded-full px-2 py-0.5 ${ (item.baixados || 0) > 0 ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700' }`}>{item.baixados || 0}</span></div></div></div></div>)}))}
         </div>
         
         {totalPedidos > TAMANHO_PAGINA && (
